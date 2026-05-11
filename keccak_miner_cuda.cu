@@ -89,28 +89,36 @@ __global__ void mine_kernel(
     const u8 *challenge,
     const u8 *target,
     u64 nonce_base,
-    Result *result
+    Result *result,
+    int iters
 ) {
     if (result->found) return;
 
-    u64 nonce_val = nonce_base + (u64)blockIdx.x * blockDim.x + threadIdx.x;
+    u64 tid = (u64)blockIdx.x * blockDim.x + threadIdx.x;
 
-    u8 input[64];
-    #pragma unroll
-    for (int i = 0; i < 32; i++) input[i] = challenge[i];
+    for (int it = 0; it < iters; it++) {
+        if (result->found) return;
 
-    #pragma unroll
-    for (int i = 0; i < 8; i++)
-        input[32+i] = (u8)((nonce_val >> (56 - i*8)) & 0xff);
-    #pragma unroll
-    for (int i = 8; i < 32; i++) input[32+i] = 0;
+        u64 nonce_val = nonce_base + tid + (u64)it * blockDim.x * gridDim.x;
 
-    u8 hash[32];
-    keccak256(input, hash);
+        u8 input[64];
+        #pragma unroll
+        for (int i = 0; i < 32; i++) input[i] = challenge[i];
 
-    if (cmp_target(hash, target)) {
-        if (atomicCAS(&result->found, 0, 1) == 0) {
-            result->nonce = nonce_val;
+        #pragma unroll
+        for (int i = 0; i < 8; i++)
+            input[32+i] = (u8)((nonce_val >> (56 - i*8)) & 0xff);
+        #pragma unroll
+        for (int i = 8; i < 32; i++) input[32+i] = 0;
+
+        u8 hash[32];
+        keccak256(input, hash);
+
+        if (cmp_target(hash, target)) {
+            if (atomicCAS(&result->found, 0, 1) == 0) {
+                result->nonce = nonce_val;
+            }
+            return;
         }
     }
 }
@@ -142,8 +150,9 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(d_target, target, 32, cudaMemcpyHostToDevice);
 
     const int THREADS = 256;
-    const int BLOCKS  = 4096;
-    const u64 BATCH   = (u64)THREADS * BLOCKS;
+    const int BLOCKS  = 8192;
+    const int ITERS   = 64;
+    const u64 BATCH   = (u64)THREADS * BLOCKS * ITERS;
 
     u64 nonce_base = (u64)rand() << 32 | rand();
     u64 total = 0;
@@ -153,7 +162,7 @@ int main(int argc, char *argv[]) {
 
     while (1) {
         cudaMemcpy(d_result, &h_result, sizeof(Result), cudaMemcpyHostToDevice);
-        mine_kernel<<<BLOCKS, THREADS>>>(d_challenge, d_target, nonce_base, d_result);
+        mine_kernel<<<BLOCKS, THREADS>>>(d_challenge, d_target, nonce_base, d_result, ITERS);
         cudaDeviceSynchronize();
         cudaMemcpy(&h_result, d_result, sizeof(Result), cudaMemcpyDeviceToHost);
 
