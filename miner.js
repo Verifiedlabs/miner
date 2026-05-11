@@ -6,11 +6,15 @@ const ABI = require("./abi");
 
 const CONTRACT = "0xAC7b5d06fa1e77D08aea40d46cB7C5923A87A0cc";
 
-const CUDA_BINARY = path.join(__dirname, "keccak_miner_cuda");
-const CPU_BINARY  = path.join(__dirname, "keccak_miner");
-const USE_CUDA    = fs.existsSync(CUDA_BINARY);
-const BINARY      = USE_CUDA ? CUDA_BINARY : CPU_BINARY;
-const NUM_WORKERS = USE_CUDA ? 1 : parseInt(process.env.NUM_WORKERS || require("os").cpus().length);
+const CUDA_BINARY  = path.join(__dirname, "keccak_miner_cuda");
+const METAL_BINARY = path.join(__dirname, "metal_miner");
+const CPU_BINARY   = path.join(__dirname, "keccak_miner");
+
+const USE_CUDA  = fs.existsSync(CUDA_BINARY);
+const USE_METAL = !USE_CUDA && fs.existsSync(METAL_BINARY);
+const BINARY    = USE_CUDA ? CUDA_BINARY : (USE_METAL ? METAL_BINARY : CPU_BINARY);
+const MODE      = USE_CUDA ? "GPU (CUDA)" : (USE_METAL ? "GPU (Metal)" : "CPU");
+const NUM_WORKERS = (USE_CUDA || USE_METAL) ? 1 : parseInt(process.env.NUM_WORKERS || require("os").cpus().length);
 
 async function main() {
   const privateKey = process.env.PRIVATE_KEY;
@@ -31,7 +35,7 @@ async function main() {
   const contract = new ethers.Contract(CONTRACT, ABI, wallet);
 
   console.log("Miner address:", wallet.address);
-  console.log("Mode:", USE_CUDA ? "GPU (CUDA)" : "CPU");
+  console.log("Mode:", MODE);
   console.log("Workers:", NUM_WORKERS);
 
   await mineLoop(contract, wallet, provider);
