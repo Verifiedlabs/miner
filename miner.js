@@ -84,12 +84,12 @@ async function mineLoop(contract, wallet, provider) {
       const feeData = await provider.getFeeData();
       const tipGwei = process.env.TIP_GWEI || "2";
       const priorityFee = ethers.parseUnits(tipGwei, "gwei");
+      const baseFee = feeData.maxFeePerGas || 0n;
+      const maxFeePerGas = baseFee > priorityFee ? baseFee : priorityFee * 2n;
       const tx = await contract.mine(BigInt("0x" + nonce), {
         gasLimit: 300000n,
-        maxFeePerGas: feeData.maxFeePerGas,
-        maxPriorityFeePerGas: priorityFee > (feeData.maxPriorityFeePerGas || 0n)
-          ? priorityFee
-          : feeData.maxPriorityFeePerGas,
+        maxFeePerGas,
+        maxPriorityFeePerGas: priorityFee,
       });
       console.log(`TX: ${tx.hash}`);
       const receipt = await tx.wait();
