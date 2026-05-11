@@ -79,50 +79,43 @@ __global__ void mine_kernel(
     u64 c0, u64 c1, u64 c2, u64 c3,
     u64 t0, u64 t1, u64 t2, u64 t3,
     u64 nonce_base,
-    Result *result,
-    int iters
+    Result *result
 ) {
-    u64 tid = (u64)blockIdx.x * blockDim.x + threadIdx.x;
-    u64 stride = (u64)blockDim.x * gridDim.x;
+    u64 nonce = nonce_base + (u64)blockIdx.x * blockDim.x + threadIdx.x;
 
-    for (int it = 0; it < iters; it++) {
-        u64 nonce = nonce_base + tid + (u64)it * stride;
+    u64 s[25];
+    s[0] = c0;
+    s[1] = c1;
+    s[2] = c2;
+    s[3] = c3;
+    s[4] = 0;
+    s[5] = 0;
+    s[6] = 0;
+    s[7] = bswap64(nonce);
+    s[8] = 0x01ULL;
+    #pragma unroll
+    for (int i = 9; i < 16; i++) s[i] = 0;
+    s[16] = 0x8000000000000000ULL;
+    #pragma unroll
+    for (int i = 17; i < 25; i++) s[i] = 0;
 
-        u64 s[25];
-        s[0] = c0;
-        s[1] = c1;
-        s[2] = c2;
-        s[3] = c3;
-        s[4] = 0;
-        s[5] = 0;
-        s[6] = 0;
-        s[7] = bswap64(nonce);
-        s[8] = 0x01ULL;
-        #pragma unroll
-        for (int i = 9; i < 16; i++) s[i] = 0;
-        s[16] = 0x8000000000000000ULL;
-        #pragma unroll
-        for (int i = 17; i < 25; i++) s[i] = 0;
+    keccak_f(s);
 
-        keccak_f(s);
-
-        u64 h0 = bswap64(s[0]);
-        if (h0 < t0) {
+    u64 h0 = bswap64(s[0]);
+    if (h0 < t0) {
+        if (atomicCAS(&result->found, 0, 1) == 0) result->nonce = nonce;
+        return;
+    }
+    if (h0 == t0) {
+        u64 h1 = bswap64(s[1]);
+        if (h1 < t1) {
             if (atomicCAS(&result->found, 0, 1) == 0) result->nonce = nonce;
             return;
         }
-        if (h0 == t0) {
-            u64 h1 = bswap64(s[1]);
-            if (h1 < t1) {
+        if (h1 == t1) {
+            u64 h2 = bswap64(s[2]);
+            if (h2 < t2 || (h2 == t2 && bswap64(s[3]) < t3)) {
                 if (atomicCAS(&result->found, 0, 1) == 0) result->nonce = nonce;
-                return;
-            }
-            if (h1 == t1) {
-                u64 h2 = bswap64(s[2]);
-                if (h2 < t2 || (h2 == t2 && bswap64(s[3]) < t3)) {
-                    if (atomicCAS(&result->found, 0, 1) == 0) result->nonce = nonce;
-                    return;
-                }
             }
         }
     }
@@ -170,9 +163,8 @@ int main(int argc, char *argv[]) {
     cudaMalloc(&d_result, sizeof(Result));
 
     const int THREADS = 256;
-    const int BLOCKS  = 16384;
-    const int ITERS   = 32;
-    const u64 BATCH   = (u64)THREADS * BLOCKS * ITERS;
+    const u64 BATCH   = 1ULL << 26;
+    const int BLOCKS  = (int)(BATCH / THREADS);
 
     srand(time(NULL));
     u64 nonce_base = ((u64)rand() << 32) | (u32)rand();
@@ -183,7 +175,7 @@ int main(int argc, char *argv[]) {
 
     while (1) {
         cudaMemcpy(d_result, &h_result, sizeof(Result), cudaMemcpyHostToDevice);
-        mine_kernel<<<BLOCKS, THREADS>>>(c0, c1, c2, c3, t0, t1, t2, t3, nonce_base, d_result, ITERS);
+        mine_kernel<<<BLOCKS, THREADS>>>(c0, c1, c2, c3, t0, t1, t2, t3, nonce_base, d_result);
         cudaDeviceSynchronize();
         cudaMemcpy(&h_result, d_result, sizeof(Result), cudaMemcpyDeviceToHost);
 
