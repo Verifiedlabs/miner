@@ -1,11 +1,16 @@
 const { ethers } = require("ethers");
 const { spawn } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 const ABI = require("./abi");
 
 const CONTRACT = "0xAC7b5d06fa1e77D08aea40d46cB7C5923A87A0cc";
-const NUM_WORKERS = parseInt(process.env.NUM_WORKERS || require("os").cpus().length);
-const BINARY = path.join(__dirname, "keccak_miner");
+
+const CUDA_BINARY = path.join(__dirname, "keccak_miner_cuda");
+const CPU_BINARY  = path.join(__dirname, "keccak_miner");
+const USE_CUDA    = fs.existsSync(CUDA_BINARY);
+const BINARY      = USE_CUDA ? CUDA_BINARY : CPU_BINARY;
+const NUM_WORKERS = USE_CUDA ? 1 : parseInt(process.env.NUM_WORKERS || require("os").cpus().length);
 
 async function main() {
   const privateKey = process.env.PRIVATE_KEY;
@@ -26,6 +31,7 @@ async function main() {
   const contract = new ethers.Contract(CONTRACT, ABI, wallet);
 
   console.log("Miner address:", wallet.address);
+  console.log("Mode:", USE_CUDA ? "GPU (CUDA)" : "CPU");
   console.log("Workers:", NUM_WORKERS);
 
   await mineLoop(contract, wallet, provider);
