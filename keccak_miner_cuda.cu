@@ -151,7 +151,7 @@ int main(int argc, char *argv[]) {
 
     const int THREADS = 256;
     const int BLOCKS  = 8192;
-    const int ITERS   = 64;
+    const int ITERS   = 1024;
     const u64 BATCH   = (u64)THREADS * BLOCKS * ITERS;
 
     u64 nonce_base = (u64)rand() << 32 | rand();
