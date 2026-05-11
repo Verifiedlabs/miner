@@ -150,8 +150,8 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(d_target, target, 32, cudaMemcpyHostToDevice);
 
     const int THREADS = 256;
-    const int BLOCKS  = 8192;
-    const int ITERS   = 1024;
+    const int BLOCKS  = 16384;
+    const int ITERS   = 16;
     const u64 BATCH   = (u64)THREADS * BLOCKS * ITERS;
 
     u64 nonce_base = (u64)rand() << 32 | rand();
@@ -178,8 +178,8 @@ int main(int argc, char *argv[]) {
         clock_gettime(CLOCK_MONOTONIC, &t1);
         double elapsed = (t1.tv_sec - last.tv_sec) + (t1.tv_nsec - last.tv_nsec) / 1e9;
         if (elapsed >= 2.0) {
-            double mhs = (double)BATCH / elapsed / 1e6;
-            fprintf(stderr, "PROGRESS:0:%llu\n", (unsigned long long)(mhs * 1e6));
+            double hps = (double)total / elapsed;
+            fprintf(stderr, "PROGRESS:0:%llu\n", (unsigned long long)hps);
             fflush(stderr);
             last = t1;
             total = 0;
