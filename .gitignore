@@ -1,0 +1,6 @@
+node_modules/
+keccak_miner
+keccak_miner_cuda
+abi-full.json
+*.air
+*.metallib
